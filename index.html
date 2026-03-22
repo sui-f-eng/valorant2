@@ -33,7 +33,7 @@
     </div>
 
     <p id="zone-hint">
-      左手区射击 · 右手区滑动推移准星（FPS 相对瞄准，准星与手指不重合）
+      左半屏射击 · 右半屏滑动移动视角；<strong>准星固定在屏幕中心</strong>，把球滑到准星下再开火
     </p>
 
     <div id="toast" role="status" aria-live="polite"></div>
@@ -42,11 +42,11 @@
       <div class="panel" id="panel-menu">
         <h1>触控练枪场</h1>
         <p class="sub">
-          30 秒挑战：静态靶、移动靶与反应靶混合。连击加分；内圈为爆头。
+          准星始终在画面正中央；右手滑动平移场景，把靶子对准中心后左手开火。静态 / 移动 / 反应靶，内圈爆头。
         </p>
 
         <div class="controls-row">
-          <label for="sensitivity">灵敏度（滑动位移倍率，建议 0.5–1.5）</label>
+          <label for="sensitivity">视角移动倍率（建议 0.5–1.5）</label>
           <input
             id="sensitivity"
             type="range"
@@ -57,12 +57,7 @@
           <div id="sensitivity-val" class="range-value">1.00</div>
         </div>
         <div class="controls-row">
-          <label for="smooth">准星插值（轻微平滑，1=无插值最跟手）</label>
-          <input id="smooth" type="range" min="55" max="100" value="92" />
-          <div id="smooth-val" class="range-value">0.92</div>
-        </div>
-        <div class="controls-row">
-          <label for="precision">精瞄辅助（小幅滑动减速，0=关闭）</label>
+          <label for="precision">精瞄辅助（小幅滑动更慢，0=关闭）</label>
           <input id="precision" type="range" min="0" max="100" value="90" />
           <div id="precision-val" class="range-value">0.90</div>
         </div>

@@ -194,7 +194,9 @@
     }
     return true;
   };
-  Target.prototype.draw = function (ctx) {
+  Target.prototype.draw = function (ctx, vox, voy) {
+    var px = this.x - vox;
+    var py = this.y - voy;
     var headR = this.headRadius();
     var alpha = 1;
     if (this.mode === "reaction" && this.initialLife > 0) {
@@ -203,11 +205,11 @@
     ctx.save();
     ctx.globalAlpha = alpha;
     var g = ctx.createRadialGradient(
-      this.x - this.r * 0.3,
-      this.y - this.r * 0.3,
+      px - this.r * 0.3,
+      py - this.r * 0.3,
       0,
-      this.x,
-      this.y,
+      px,
+      py,
       this.r
     );
     g.addColorStop(0, "rgba(255,120,130,0.95)");
@@ -215,14 +217,14 @@
     g.addColorStop(1, "rgba(140,30,45,0.9)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.arc(px, py, this.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = "rgba(10,14,20,0.75)";
     ctx.beginPath();
-    ctx.arc(this.x, this.y, headR, 0, Math.PI * 2);
+    ctx.arc(px, py, headR, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
     ctx.lineWidth = 1.5;
@@ -237,11 +239,24 @@
     if (r < staticP + moveP) return "moving";
     return "reaction";
   }
-  function spawnTarget(w, h, gameTime, difficulty) {
+  function spawnTarget(worldW, worldH, gameTime, difficulty, vx, vy, sw, sh) {
     var rad = U.clamp(U.rand(22, 38) - difficulty * 2, 18, 40);
     var margin = rad + 8;
-    var x = U.rand(margin, w - margin);
-    var y = U.rand(margin, h - margin);
+    var pad = Math.max(sw, sh) * 0.4;
+    var x0 = U.clamp(vx - pad, margin, worldW - margin);
+    var x1 = U.clamp(vx + sw + pad, margin, worldW - margin);
+    if (x1 <= x0) {
+      x0 = margin;
+      x1 = worldW - margin;
+    }
+    var y0 = U.clamp(vy - pad, margin, worldH - margin);
+    var y1 = U.clamp(vy + sh + pad, margin, worldH - margin);
+    if (y1 <= y0) {
+      y0 = margin;
+      y1 = worldH - margin;
+    }
+    var x = U.rand(x0, x1);
+    var y = U.rand(y0, y1);
     var mode = pickMode(difficulty);
     var vx = 0;
     var vy = 0;
@@ -302,10 +317,14 @@
     this.highScore = 0;
     this.loadHighScore();
     this.sensitivity = 1;
-    this.smooth = 0.92;
     this.recoilAmount = 1;
-    /** 0=关闭精瞄曲线，1=小幅滑动明显减速，便于微调 */
+    /** 0=关闭精瞄曲线，1=小幅滑动明显减速 */
     this.precisionAssist = 0.9;
+    this.worldW = 0;
+    this.worldH = 0;
+    /** 视口左上角在世界坐标中的位置；屏幕中心对准世界点 (viewOffsetX+w/2, viewOffsetY+h/2) */
+    this.viewOffsetX = 0;
+    this.viewOffsetY = 0;
     this.targets = [];
     this.particles = [];
     this.hitMarkers = [];
@@ -317,10 +336,6 @@
     this.hasAimFinger = false;
     this.lastAimClientX = 0;
     this.lastAimClientY = 0;
-    this.crossX = 0;
-    this.crossY = 0;
-    this.aimTargetX = 0;
-    this.aimTargetY = 0;
     this.recoilX = 0;
     this.recoilY = 0;
     this.lastShotAt = -1;
@@ -352,28 +367,48 @@
     this.h = nh;
     this.canvas.width = this.w;
     this.canvas.height = this.h;
+    this.syncWorldSize();
     if (!hadSize) {
-      this.crossX = this.w * 0.5;
-      this.crossY = this.h * 0.5;
-      this.aimTargetX = this.crossX;
-      this.aimTargetY = this.crossY;
+      this.centerView();
     } else {
-      this.aimTargetX = U.clamp(this.aimTargetX, 8, this.w - 8);
-      this.aimTargetY = U.clamp(this.aimTargetY, 8, this.h - 8);
-      this.crossX = U.clamp(this.crossX, 8, this.w - 8);
-      this.crossY = U.clamp(this.crossY, 8, this.h - 8);
+      this.clampView();
     }
   };
-  AimGame.prototype.isRightZone = function (clientX) {
-    return clientX >= global.innerWidth * 0.5;
+  AimGame.prototype.syncWorldSize = function () {
+    this.worldW = Math.max(Math.floor(this.w * 2.8), 1200);
+    this.worldH = Math.max(Math.floor(this.h * 2.8), 1800);
   };
-  AimGame.prototype.isLeftZone = function (clientX) {
-    return clientX < global.innerWidth * 0.5;
+  AimGame.prototype.centerView = function () {
+    this.viewOffsetX = (this.worldW - this.w) * 0.5;
+    this.viewOffsetY = (this.worldH - this.h) * 0.5;
+    this.clampView();
+  };
+  AimGame.prototype.clampView = function () {
+    if (this.worldW <= 0 || this.w <= 0) return;
+    var maxX = Math.max(0, this.worldW - this.w);
+    var maxY = Math.max(0, this.worldH - this.h);
+    this.viewOffsetX = U.clamp(this.viewOffsetX, 0, maxX);
+    this.viewOffsetY = U.clamp(this.viewOffsetY, 0, maxY);
+  };
+  AimGame.prototype.normInCanvas = function (clientX, clientY) {
+    var rect = this.canvas.getBoundingClientRect();
+    var nw = rect.width > 0 ? rect.width : 1;
+    var nh = rect.height > 0 ? rect.height : 1;
+    return {
+      nx: (clientX - rect.left) / nw,
+      ny: (clientY - rect.top) / nh,
+    };
+  };
+  AimGame.prototype.isRightAimZone = function (clientX, clientY) {
+    return this.normInCanvas(clientX, clientY).nx >= 0.5;
+  };
+  AimGame.prototype.isLeftFireZone = function (clientX, clientY) {
+    return this.normInCanvas(clientX, clientY).nx < 0.5;
   };
 
   /**
-   * FPS 式相对滑动：准星 += 手指位移（canvas 坐标）× 灵敏度 × 精瞄曲线
-   * 禁止把准星设为手指绝对坐标。
+   * 右手滑动平移视角：世界相对屏幕移动，准星始终在画面中心。
+   * screen = world - viewOffset → 手指右滑增加 viewOffset，靶向左移，把球移到中心准星下。
    */
   AimGame.prototype.applyRelativeAimDelta = function (clientX, clientY) {
     var rect = this.canvas.getBoundingClientRect();
@@ -395,10 +430,16 @@
     }
     var prec = U.lerp(1, precFine, this.precisionAssist);
 
-    this.aimTargetX += dcx * this.sensitivity * prec;
-    this.aimTargetY += dcy * this.sensitivity * prec;
-    this.aimTargetX = U.clamp(this.aimTargetX, 8, this.w - 8);
-    this.aimTargetY = U.clamp(this.aimTargetY, 8, this.h - 8);
+    this.viewOffsetX += dcx * this.sensitivity * prec;
+    this.viewOffsetY += dcy * this.sensitivity * prec;
+    this.clampView();
+  };
+
+  AimGame.prototype.worldAimPoint = function () {
+    return {
+      x: this.viewOffsetX + this.w * 0.5 + this.recoilX,
+      y: this.viewOffsetY + this.h * 0.5 + this.recoilY,
+    };
   };
 
   AimGame.prototype.onTouchStart = function (e) {
@@ -406,14 +447,14 @@
     var i;
     for (i = 0; i < e.changedTouches.length; i++) {
       var t = e.changedTouches[i];
-      if (this.isRightZone(t.clientX)) {
+      if (this.isRightAimZone(t.clientX, t.clientY)) {
         if (this.aimTouchId === null) {
           this.aimTouchId = t.identifier;
           this.hasAimFinger = true;
           this.lastAimClientX = t.clientX;
           this.lastAimClientY = t.clientY;
         }
-      } else if (this.isLeftZone(t.clientX)) {
+      } else if (this.isLeftFireZone(t.clientX, t.clientY)) {
         this.fire();
       }
     }
@@ -443,11 +484,12 @@
     if (this.state !== "playing") return;
     this.shots += 1;
     this.lastShotAt = this.elapsed;
-    var ax = this.crossX;
-    var ay = this.crossY;
     var rec = 14 * this.recoilAmount;
     this.recoilX += U.rand(-rec, rec);
     this.recoilY += U.rand(-rec, rec);
+    var ap = this.worldAimPoint();
+    var ax = ap.x;
+    var ay = ap.y;
     var best = -1;
     var bestD = 1e15;
     var j;
@@ -471,9 +513,11 @@
         this.hits += 1;
         this.combo += 1;
         if (this.combo > this.maxCombo) this.maxCombo = this.combo;
-        Particles.burst(this.particles, tg.x, tg.y, headshot);
-        Particles.flash(this.particles, tg.x, tg.y);
-        this.hitMarkers.push(new HitMarker(tg.x, tg.y, 0.22));
+        var sx = tg.x - this.viewOffsetX;
+        var sy = tg.y - this.viewOffsetY;
+        Particles.burst(this.particles, sx, sy, headshot);
+        Particles.flash(this.particles, sx, sy);
+        this.hitMarkers.push(new HitMarker(sx, sy, 0.22));
         Audio.playHit(headshot);
         this.targets.splice(best, 1);
         this._notifyHud();
@@ -535,12 +579,10 @@
     this.elapsed = 0;
     this.aimTouchId = null;
     this.hasAimFinger = false;
-    this.crossX = this.w * 0.5;
-    this.crossY = this.h * 0.5;
-    this.aimTargetX = this.crossX;
-    this.aimTargetY = this.crossY;
     this.recoilX = 0;
     this.recoilY = 0;
+    this.syncWorldSize();
+    this.centerView();
     this._notifyHud();
   };
   AimGame.prototype.update = function (dt) {
@@ -558,7 +600,18 @@
     this.spawnTimer -= dt;
     var maxTargets = 16;
     if (this.spawnTimer <= 0 && this.targets.length < maxTargets) {
-      this.targets.push(Targets.spawn(this.w, this.h, this.elapsed, this.difficulty));
+      this.targets.push(
+        Targets.spawn(
+          this.worldW,
+          this.worldH,
+          this.elapsed,
+          this.difficulty,
+          this.viewOffsetX,
+          this.viewOffsetY,
+          this.w,
+          this.h
+        )
+      );
       this.spawnTimer = this.spawnInterval * U.rand(0.85, 1.1);
       Audio.playSpawn();
     } else if (this.targets.length >= maxTargets) {
@@ -567,20 +620,9 @@
     var recDamp = Math.pow(0.12, dt * 60);
     this.recoilX *= recDamp;
     this.recoilY *= recDamp;
-    var destX = U.clamp(this.aimTargetX + this.recoilX, 8, this.w - 8);
-    var destY = U.clamp(this.aimTargetY + this.recoilY, 8, this.h - 8);
-    var k = U.clamp(this.smooth, 0.04, 1);
-    if (k >= 0.999) {
-      this.crossX = destX;
-      this.crossY = destY;
-    } else {
-      var lerpK = 1 - Math.pow(1 - k, dt * 60);
-      this.crossX = U.lerp(this.crossX, destX, lerpK);
-      this.crossY = U.lerp(this.crossY, destY, lerpK);
-    }
     var i;
     for (i = this.targets.length - 1; i >= 0; i--) {
-      if (!this.targets[i].update(dt, this.w, this.h)) {
+      if (!this.targets[i].update(dt, this.worldW, this.worldH)) {
         this.targets.splice(i, 1);
         this.combo = 0;
       }
@@ -620,15 +662,17 @@
     ctx.strokeStyle = "rgba(255,70,85,0.07)";
     ctx.lineWidth = 1 * this.dpr;
     var step = 48 * this.dpr;
+    var ox = ((this.viewOffsetX % step) + step) % step;
+    var oy = ((this.viewOffsetY % step) + step) % step;
     var x;
     var y;
-    for (x = 0; x < this.w; x += step) {
+    for (x = -ox; x < this.w + step; x += step) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, this.h);
       ctx.stroke();
     }
-    for (y = 0; y < this.h; y += step) {
+    for (y = -oy; y < this.h + step; y += step) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(this.w, y);
@@ -637,8 +681,8 @@
   };
   AimGame.prototype.drawCrosshair = function () {
     var ctx = this.ctx;
-    var x = this.crossX;
-    var y = this.crossY;
+    var x = this.w * 0.5;
+    var y = this.h * 0.5;
     var s = 10 * this.dpr;
     var out = 18 * this.dpr;
     var thick = 2 * this.dpr;
@@ -687,7 +731,7 @@
     this.drawBackground();
     var i;
     for (i = 0; i < this.targets.length; i++) {
-      this.targets[i].draw(ctx);
+      this.targets[i].draw(ctx, this.viewOffsetX, this.viewOffsetY);
     }
     for (i = 0; i < this.particles.length; i++) {
       this.particles[i].draw(ctx);
@@ -702,7 +746,7 @@
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 3 * this.dpr;
       ctx.beginPath();
-      ctx.arc(this.crossX, this.crossY, 26 * this.dpr, 0, Math.PI * 2);
+      ctx.arc(this.w * 0.5, this.h * 0.5, 26 * this.dpr, 0, Math.PI * 2);
       ctx.stroke();
     }
   };
@@ -729,8 +773,6 @@
     var toast = $("toast");
     var sensSlider = $("sensitivity");
     var sensVal = $("sensitivity-val");
-    var smoothSlider = $("smooth");
-    var smoothVal = $("smooth-val");
     var precSlider = $("precision");
     var precVal = $("precision-val");
     var recoilSlider = $("recoil");
@@ -782,16 +824,13 @@
     game.refreshHud();
     function readSliders() {
       game.sensitivity = parseFloat(sensSlider.value, 10) / 100;
-      game.smooth = parseFloat(smoothSlider.value, 10) / 100;
       game.precisionAssist = parseFloat(precSlider.value, 10) / 100;
       game.recoilAmount = parseFloat(recoilSlider.value, 10) / 100;
       sensVal.textContent = game.sensitivity.toFixed(2);
-      smoothVal.textContent = game.smooth.toFixed(2);
       precVal.textContent = game.precisionAssist.toFixed(2);
       recoilVal.textContent = game.recoilAmount.toFixed(2);
     }
     sensSlider.addEventListener("input", readSliders);
-    smoothSlider.addEventListener("input", readSliders);
     precSlider.addEventListener("input", readSliders);
     recoilSlider.addEventListener("input", readSliders);
     readSliders();
