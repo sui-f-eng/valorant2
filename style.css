@@ -1,0 +1,249 @@
+/* Valorant-style mobile aim trainer — HUD + layout */
+
+:root {
+  --bg: #0a0e12;
+  --panel: rgba(12, 18, 26, 0.92);
+  --border: rgba(255, 70, 85, 0.35);
+  --accent: #ff4655;
+  --accent-dim: #ff8a94;
+  --text: #e8eef5;
+  --muted: #7a8a9e;
+  --success: #3dff9c;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--text);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#game-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  vertical-align: top;
+}
+
+#hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.55) 0%,
+    transparent 100%
+  );
+}
+
+.hud-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 72px;
+}
+
+.hud-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hud-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-shadow: 0 0 12px rgba(255, 70, 85, 0.25);
+}
+
+.hud-value.combo {
+  color: var(--accent-dim);
+}
+
+.hud-value.accent {
+  color: var(--accent);
+}
+
+#zone-hint {
+  position: fixed;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  z-index: 9;
+  opacity: 0.85;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 12, 0.88);
+  z-index: 20;
+  padding: 24px;
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.panel {
+  width: min(400px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 28px 24px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.panel h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.panel .sub {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.controls-row {
+  margin-bottom: 16px;
+}
+
+.controls-row label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.controls-row select,
+.controls-row input[type="range"] {
+  width: 100%;
+}
+
+.controls-row input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.range-value {
+  font-size: 12px;
+  color: var(--accent-dim);
+  margin-top: 4px;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+button.primary {
+  flex: 1;
+  min-width: 120px;
+  padding: 14px 18px;
+  border: none;
+  border-radius: 2px;
+  background: var(--accent);
+  color: #0a0e12;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 20px rgba(255, 70, 85, 0.35);
+}
+
+button.primary:active {
+  transform: scale(0.98);
+}
+
+button.ghost {
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.best-score {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.best-score strong {
+  color: var(--success);
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  background: rgba(255, 70, 85, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-dim);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 15;
+}
+
+#toast.show {
+  opacity: 1;
+}
