@@ -302,8 +302,10 @@
     this.highScore = 0;
     this.loadHighScore();
     this.sensitivity = 1;
-    this.smooth = 0.88;
+    this.smooth = 0.92;
     this.recoilAmount = 1;
+    /** 0=关闭精瞄曲线，1=小幅滑动明显减速，便于微调 */
+    this.precisionAssist = 0.9;
     this.targets = [];
     this.particles = [];
     this.hitMarkers = [];
@@ -313,6 +315,8 @@
     this.elapsed = 0;
     this.aimTouchId = null;
     this.hasAimFinger = false;
+    this.lastAimClientX = 0;
+    this.lastAimClientY = 0;
     this.crossX = 0;
     this.crossY = 0;
     this.aimTargetX = 0;
@@ -341,23 +345,24 @@
   AimGame.prototype.resize = function () {
     this.dpr = Math.min(global.devicePixelRatio || 1, 2.5);
     var rect = this.canvas.getBoundingClientRect();
-    this.w = Math.floor(rect.width * this.dpr);
-    this.h = Math.floor(rect.height * this.dpr);
+    var nw = Math.floor(rect.width * this.dpr);
+    var nh = Math.floor(rect.height * this.dpr);
+    var hadSize = this.w > 0 && this.h > 0;
+    this.w = nw;
+    this.h = nh;
     this.canvas.width = this.w;
     this.canvas.height = this.h;
-    this.crossX = this.w * 0.5;
-    this.crossY = this.h * 0.5;
-    this.aimTargetX = this.crossX;
-    this.aimTargetY = this.crossY;
-  };
-  AimGame.prototype.screenToCanvas = function (clientX, clientY) {
-    var rect = this.canvas.getBoundingClientRect();
-    var sx = this.w / rect.width;
-    var sy = this.h / rect.height;
-    return {
-      x: (clientX - rect.left) * sx,
-      y: (clientY - rect.top) * sy,
-    };
+    if (!hadSize) {
+      this.crossX = this.w * 0.5;
+      this.crossY = this.h * 0.5;
+      this.aimTargetX = this.crossX;
+      this.aimTargetY = this.crossY;
+    } else {
+      this.aimTargetX = U.clamp(this.aimTargetX, 8, this.w - 8);
+      this.aimTargetY = U.clamp(this.aimTargetY, 8, this.h - 8);
+      this.crossX = U.clamp(this.crossX, 8, this.w - 8);
+      this.crossY = U.clamp(this.crossY, 8, this.h - 8);
+    }
   };
   AimGame.prototype.isRightZone = function (clientX) {
     return clientX >= global.innerWidth * 0.5;
@@ -365,15 +370,37 @@
   AimGame.prototype.isLeftZone = function (clientX) {
     return clientX < global.innerWidth * 0.5;
   };
-  AimGame.prototype.setAimFromClient = function (clientX, clientY) {
-    var p = this.screenToCanvas(clientX, clientY);
-    var cx = this.w * 0.5;
-    var cy = this.h * 0.5;
-    var tx = cx + (p.x - cx) * this.sensitivity;
-    var ty = cy + (p.y - cy) * this.sensitivity;
-    this.aimTargetX = U.clamp(tx, 8, this.w - 8);
-    this.aimTargetY = U.clamp(ty, 8, this.h - 8);
+
+  /**
+   * FPS 式相对滑动：准星 += 手指位移（canvas 坐标）× 灵敏度 × 精瞄曲线
+   * 禁止把准星设为手指绝对坐标。
+   */
+  AimGame.prototype.applyRelativeAimDelta = function (clientX, clientY) {
+    var rect = this.canvas.getBoundingClientRect();
+    var sx = this.w / rect.width;
+    var sy = this.h / rect.height;
+    var dcx = (clientX - this.lastAimClientX) * sx;
+    var dcy = (clientY - this.lastAimClientY) * sy;
+    this.lastAimClientX = clientX;
+    this.lastAimClientY = clientY;
+
+    var len = Math.sqrt(dcx * dcx + dcy * dcy);
+    var precFine = 1;
+    if (len > 1e-4) {
+      var cap = 11 * this.dpr;
+      if (len < cap) {
+        var u = len / cap;
+        precFine = 0.26 + 0.74 * u * u;
+      }
+    }
+    var prec = U.lerp(1, precFine, this.precisionAssist);
+
+    this.aimTargetX += dcx * this.sensitivity * prec;
+    this.aimTargetY += dcy * this.sensitivity * prec;
+    this.aimTargetX = U.clamp(this.aimTargetX, 8, this.w - 8);
+    this.aimTargetY = U.clamp(this.aimTargetY, 8, this.h - 8);
   };
+
   AimGame.prototype.onTouchStart = function (e) {
     if (this.state !== "playing") return;
     var i;
@@ -383,7 +410,8 @@
         if (this.aimTouchId === null) {
           this.aimTouchId = t.identifier;
           this.hasAimFinger = true;
-          this.setAimFromClient(t.clientX, t.clientY);
+          this.lastAimClientX = t.clientX;
+          this.lastAimClientY = t.clientY;
         }
       } else if (this.isLeftZone(t.clientX)) {
         this.fire();
@@ -396,7 +424,7 @@
     for (i = 0; i < e.changedTouches.length; i++) {
       var t = e.changedTouches[i];
       if (t.identifier === this.aimTouchId) {
-        this.setAimFromClient(t.clientX, t.clientY);
+        this.applyRelativeAimDelta(t.clientX, t.clientY);
         break;
       }
     }
@@ -703,6 +731,8 @@
     var sensVal = $("sensitivity-val");
     var smoothSlider = $("smooth");
     var smoothVal = $("smooth-val");
+    var precSlider = $("precision");
+    var precVal = $("precision-val");
     var recoilSlider = $("recoil");
     var recoilVal = $("recoil-val");
     var btnStart = $("btn-start");
@@ -753,13 +783,16 @@
     function readSliders() {
       game.sensitivity = parseFloat(sensSlider.value, 10) / 100;
       game.smooth = parseFloat(smoothSlider.value, 10) / 100;
+      game.precisionAssist = parseFloat(precSlider.value, 10) / 100;
       game.recoilAmount = parseFloat(recoilSlider.value, 10) / 100;
       sensVal.textContent = game.sensitivity.toFixed(2);
       smoothVal.textContent = game.smooth.toFixed(2);
+      precVal.textContent = game.precisionAssist.toFixed(2);
       recoilVal.textContent = game.recoilAmount.toFixed(2);
     }
     sensSlider.addEventListener("input", readSliders);
     smoothSlider.addEventListener("input", readSliders);
+    precSlider.addEventListener("input", readSliders);
     recoilSlider.addEventListener("input", readSliders);
     readSliders();
     game.startRenderLoop();

@@ -33,7 +33,7 @@
     </div>
 
     <p id="zone-hint">
-      左手区射击 · 右手区拖移准星（绝对跟手）
+      左手区射击 · 右手区滑动推移准星（FPS 相对瞄准，准星与手指不重合）
     </p>
 
     <div id="toast" role="status" aria-live="polite"></div>
@@ -46,7 +46,7 @@
         </p>
 
         <div class="controls-row">
-          <label for="sensitivity">灵敏度（相对屏幕中心缩放）</label>
+          <label for="sensitivity">灵敏度（滑动位移倍率，建议 0.5–1.5）</label>
           <input
             id="sensitivity"
             type="range"
@@ -57,9 +57,14 @@
           <div id="sensitivity-val" class="range-value">1.00</div>
         </div>
         <div class="controls-row">
-          <label for="smooth">跟手度（越大越贴手指，1=几乎无延迟）</label>
-          <input id="smooth" type="range" min="55" max="100" value="88" />
-          <div id="smooth-val" class="range-value">0.88</div>
+          <label for="smooth">准星插值（轻微平滑，1=无插值最跟手）</label>
+          <input id="smooth" type="range" min="55" max="100" value="92" />
+          <div id="smooth-val" class="range-value">0.92</div>
+        </div>
+        <div class="controls-row">
+          <label for="precision">精瞄辅助（小幅滑动减速，0=关闭）</label>
+          <input id="precision" type="range" min="0" max="100" value="90" />
+          <div id="precision-val" class="range-value">0.90</div>
         </div>
         <div class="controls-row">
           <label for="recoil">后坐力强度</label>
